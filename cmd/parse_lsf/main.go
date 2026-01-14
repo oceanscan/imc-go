@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"imc-go"
 	"io"
 	"log"
 	"os"
+
+	"github.com/oceanscan/imc-go"
 )
 
 func main() {

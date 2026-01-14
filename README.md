@@ -30,7 +30,7 @@ To use `imc-go` in your own project:
 
 3. **Import and use**:
    ```go
-   import "imc-go"
+   import "github.com/oceanscan/imc-go"
    ```
 
 ## Publishing to Git
@@ -75,7 +75,7 @@ go mod tidy
 ### 1. Initialize the Protocol
 
 ```go
-import "imc-go"
+import "github.com/oceanscan/imc-go"
 
 // Parse the XML specification
 xmlProto, _ := imc.ParseXML("IMC.xml")
@@ -123,7 +123,7 @@ for {
 For a more convenient development experience, you can use generated structs to avoid raw map access:
 
 ```go
-import "imc-go"
+import "github.com/oceanscan/imc-go"
 
 // Receiving and converting to typed
 msg, addr, _ := trans.Receive()
@@ -166,19 +166,13 @@ This will update `messages.go` with structs for all messages defined in the XML.
 
 The project includes several command-line tools in the `cmd/` directory to demonstrate the library's capabilities. 
 
-### 1. Verification Tool (Unicast Loopback)
-Sends and receives an `Announce` message locally to verify serialization and basic networking.
-```bash
-go run cmd/verify/main.go
-```
-
-### 2. Multicast Listener
+### 1. Multicast Listener
 Joins the standard LSTS multicast group and prints received `Announce` messages from other systems on the network.
 ```bash
 go run cmd/multicast_listener/main.go
 ```
 
-### 3. LSF Log Parser
+### 2. LSF Log Parser
 Parses a binary `.lsf` log file and prints message statistics.
 ```bash
 # Make sure the test data is available

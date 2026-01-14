@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"imc-go"
 	"log"
 	"sync"
+
+	"github.com/oceanscan/imc-go"
 )
 
 func listen(proto *imc.Protocol, port int, group string) {

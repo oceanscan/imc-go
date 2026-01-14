@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"imc-go"
 	"log"
 	"os"
 	"strings"
 	"text/template"
+
+	"github.com/oceanscan/imc-go"
 )
 
 var typeMap = map[string]string{
