@@ -23,7 +23,7 @@ var (
 )
 
 const (
-	// Earth radius in meters (WGS-84)
+	// WGS-84 semi-major axis (equatorial radius) in meters
 	earthRadius = 6378137.0
 )
 
@@ -221,11 +221,11 @@ func main() {
 // Returns the new latitude and longitude in radians
 func translateWGS84(latRad, lonRad, northMeters, eastMeters float64) (float64, float64) {
 	// Calculate the change in latitude (north offset)
-	// 1 degree of latitude ≈ 111,320 meters
+	// Using small angle approximation: deltaLat (radians) = distance / radius
 	deltaLat := northMeters / earthRadius
 
 	// Calculate the change in longitude (east offset)
-	// Longitude degree distance varies with latitude
+	// Longitude distance varies with latitude due to Earth's spherical shape
 	deltaLon := eastMeters / (earthRadius * math.Cos(latRad))
 
 	newLat := latRad + deltaLat
