@@ -155,7 +155,25 @@ Parses a binary `.lsf` log file and prints message statistics.
 go run cmd/parse_lsf/main.go
 ```
 
-### 4. Code Generator
+### 3. Position Exporter
+Exports vehicle positions from EstimatedState messages in LSF files at 1-second intervals. The output includes timestamp, latitude/longitude (in degrees), depth, and altitude (in meters).
+```bash
+go run cmd/lsf2positions/main.go -lsf /path/to/Data.lsf -out positions.csv
+```
+
+### 4. LSF to CSV Converter
+Exports specific message types from LSF files to CSV format.
+```bash
+go run cmd/lsf2csv/main.go -lsf /path/to/Data.lsf -msg EstimatedState -out ./output
+```
+
+### 5. LSF to JSON Converter
+Exports messages from LSF files to JSON format.
+```bash
+go run cmd/lsf2json/main.go -lsf /path/to/Data.lsf -msg Announce
+```
+
+### 6. Code Generator
 Updates the typed message structs in `messages.go` based on the current `IMC.xml`.
 ```bash
 go run cmd/gen_messages/main.go
