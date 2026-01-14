@@ -113,11 +113,22 @@ func main() {
 	}
 	defer outFile.Close()
 
-	csvWriter := csv.NewWriter(bufio.NewWriter(outFile))
-	defer csvWriter.Flush()
+	bw := bufio.NewWriter(outFile)
+	csvWriter := csv.NewWriter(bw)
+	defer func() {
+		csvWriter.Flush()
+		if err := csvWriter.Error(); err != nil {
+			log.Fatalf("CSV writer error: %v", err)
+		}
+		if err := bw.Flush(); err != nil {
+			log.Fatalf("Buffer writer error: %v", err)
+		}
+	}()
 
 	// Write CSV header
-	csvWriter.Write([]string{"timestamp", "latitude_deg", "longitude_deg", "depth_m", "altitude_m"})
+	if err := csvWriter.Write([]string{"timestamp", "latitude_deg", "longitude_deg", "depth_m", "altitude_m"}); err != nil {
+		log.Fatalf("Failed to write CSV header: %v", err)
+	}
 
 	fmt.Println("Processing EstimatedState messages...")
 	count := 0
@@ -189,7 +200,9 @@ func main() {
 			fmt.Sprintf("%.2f", depth),
 			fmt.Sprintf("%.2f", alt),
 		}
-		csvWriter.Write(row)
+		if err := csvWriter.Write(row); err != nil {
+			log.Fatalf("Failed to write CSV row: %v", err)
+		}
 		exportedCount++
 		lastExportedTime = header.Timestamp
 
@@ -199,7 +212,7 @@ func main() {
 		}
 	}
 
-	csvWriter.Flush()
+	// Final flush and error check handled by defer
 	fmt.Printf("\rProcessed %d messages, exported %d positions (100.0%%)   \n", count, exportedCount)
 	fmt.Printf("Done. Positions exported to %s\n", *outPath)
 }
