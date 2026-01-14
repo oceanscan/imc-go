@@ -7,7 +7,6 @@ import (
 	"syscall"
 
 	"golang.org/x/net/ipv4"
-	"golang.org/x/sys/unix"
 )
 
 type Transporter struct {
@@ -20,12 +19,7 @@ func NewUDPTransporter(proto *Protocol, addr string) (*Transporter, error) {
 		Control: func(network, address string, c syscall.RawConn) error {
 			var err error
 			c.Control(func(fd uintptr) {
-				// Set SO_REUSEADDR and SO_REUSEPORT
-				err = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1)
-				if err != nil {
-					return
-				}
-				err = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
+				err = setSocketOptions(fd)
 			})
 			return err
 		},

@@ -35,3 +35,6 @@ verification_run.png
 
 # Large datasets
 data/
+
+# Build artifacts
+dist/

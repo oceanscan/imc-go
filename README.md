@@ -12,6 +12,51 @@ A dynamic Go implementation of the Inter-Module Communication (IMC) protocol. Th
 - **Nested Message Support**: Full recursion for `message` and `message-list` types.
 - **Strict Validation**: CRC16 checks and synchronization number verification.
 
+## Importing as a Library
+
+To use `imc-go` in your own project:
+
+1. **Initialize your module**:
+   ```bash
+   go mod init my-project
+   ```
+
+2. **Add the dependency**:
+   If the module is local, use the `replace` directive:
+   ```bash
+   go mod edit -replace imc-go=../path/to/imc-go
+   go get imc-go
+   ```
+
+3. **Import and use**:
+   ```go
+   import "imc-go"
+   ```
+
+## Publishing to Git
+
+To share this module on a platform like GitHub:
+
+1. **Update module name** in `go.mod`:
+   ```go
+   module github.com/username/imc-go
+   ```
+
+2. **Push to repository**:
+   ```bash
+   git init
+   git add .
+   git commit -m "Initial commit"
+   git remote add origin https://github.com/username/imc-go.git
+   git push -u origin main
+   ```
+
+3. **Tag versions**:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
 ## Getting Started
 
 ### Prerequisites
@@ -146,6 +191,24 @@ Updates the typed message structs in `messages.go` based on the current `IMC.xml
 go run cmd/gen_messages/main.go
 ```
 
-## License
+## Cross-Compilation (Raspberry Pi)
 
-MIT (or as specified in the project)
+To compile the tools for a Raspberry Pi or other ARM devices from your development machine:
+
+### For Raspberry Pi 4/5 (64-bit)
+```bash
+GOOS=linux GOARCH=arm64 go build -o listener-arm64 cmd/multicast_listener/main.go
+```
+
+### For Raspberry Pi 3 or Zero 2 (32-bit)
+```bash
+GOOS=linux GOARCH=arm go build -o listener-arm cmd/multicast_listener/main.go
+```
+
+## Windows Support
+
+The library is cross-platform and supports Windows. To compile for Windows from Linux or macOS:
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o listener.exe cmd/multicast_listener/main.go
+```
