@@ -2,7 +2,7 @@
 
 # Configuration
 DIST_DIR="dist"
-COMMANDS=("multicast_listener" "parse_lsf")
+COMMANDS=("multicast_listener" "lsf2csv")
 PLATFORMS=(
     "linux/amd64"
     "linux/arm64"

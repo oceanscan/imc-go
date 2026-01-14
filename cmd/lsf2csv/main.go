@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/csv"
 	"flag"
 	"fmt"
@@ -59,10 +60,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Loading protocol from %s...\n", *xmlPath)
-	xmlProto, err := imc.ParseXML(*xmlPath)
+	xmlFile := *xmlPath
+	if xmlFile == "IMC.xml" {
+		// If default, check if it exists in the current directory
+		if _, err := os.Stat(xmlFile); os.IsNotExist(err) {
+			// Try same directory as LSF
+			alt := filepath.Join(filepath.Dir(*lsfPath), "IMC.xml")
+			if _, err := os.Stat(alt); err == nil {
+				xmlFile = alt
+			} else {
+				// Try .gz version
+				altGz := alt + ".gz"
+				if _, err := os.Stat(altGz); err == nil {
+					xmlFile = altGz
+				}
+			}
+		}
+	}
+
+	fmt.Printf("Loading protocol from %s...\n", xmlFile)
+	xmlR, _, err := openFile(xmlFile)
 	if err != nil {
-		log.Fatalf("Failed to parse IMC.xml: %v", err)
+		log.Fatalf("Failed to open XML: %v", err)
+	}
+	xmlProto, err := imc.ParseReader(xmlR)
+	xmlR.Close()
+	if err != nil {
+		log.Fatalf("Failed to parse IMC XML: %v", err)
 	}
 	proto := imc.NewProtocol(xmlProto)
 
@@ -81,14 +105,11 @@ func main() {
 	end, _ := parseTime(*endTime)
 
 	// Open LSF
-	f, err := os.Open(*lsfPath)
+	f, totalSize, err := openFile(*lsfPath)
 	if err != nil {
 		log.Fatalf("Failed to open LSF: %v", err)
 	}
 	defer f.Close()
-
-	fi, _ := f.Stat()
-	totalSize := fi.Size()
 
 	cr := &CountingReader{r: f}
 	br := bufio.NewReaderSize(cr, 64*1024) // 64KB buffer
@@ -185,14 +206,11 @@ func main() {
 }
 
 func buildEntityMap(path string, proto *imc.Protocol) map[uint8]string {
-	f, err := os.Open(path)
+	f, totalSize, err := openFile(path)
 	if err != nil {
 		return nil
 	}
 	defer f.Close()
-
-	fi, _ := f.Stat()
-	totalSize := fi.Size()
 
 	cr := &CountingReader{r: f}
 	br := bufio.NewReaderSize(cr, 64*1024)
@@ -231,6 +249,46 @@ func buildEntityMap(path string, proto *imc.Protocol) map[uint8]string {
 	}
 	fmt.Printf("\rScanning... 100.0%%\n")
 	return entities
+}
+
+func openFile(path string) (io.ReadCloser, int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	fi, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, 0, err
+	}
+	size := fi.Size()
+
+	if strings.HasSuffix(path, ".gz") {
+		gr, err := gzip.NewReader(f)
+		if err != nil {
+			f.Close()
+			return nil, 0, err
+		}
+		// Wrap to ensure f is also closed when gr is closed
+		return &gzipReadCloser{Reader: gr, f: f}, size, nil
+	}
+
+	return f, size, nil
+}
+
+type gzipReadCloser struct {
+	*gzip.Reader
+	f *os.File
+}
+
+func (g *gzipReadCloser) Close() error {
+	err1 := g.Reader.Close()
+	err2 := g.f.Close()
+	if err1 != nil {
+		return err1
+	}
+	return err2
 }
 
 func createExport(abbrev string, msgDef *imc.XMLMessage, fieldFilter []string, proto *imc.Protocol) (*CsvExport, error) {
