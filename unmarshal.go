@@ -13,6 +13,28 @@ func (p *Protocol) Unmarshal(data []byte) (*Message, error) {
 }
 
 func (p *Protocol) UnmarshalReader(r io.Reader) (*Message, error) {
+	h, err := p.UnmarshalHeader(r)
+	if err != nil {
+		return nil, err
+	}
+
+	m, err := p.UnmarshalFields(r, h.MGID)
+	if err != nil {
+		return nil, err
+	}
+	m.Header = *h
+
+	// Read CRC (optional validation)
+	var crc uint16
+	if err := binary.Read(r, binary.LittleEndian, &crc); err != nil {
+		// Footer might be missing in some streams
+		return m, nil
+	}
+
+	return m, nil
+}
+
+func (p *Protocol) UnmarshalHeader(r io.Reader) (*Header, error) {
 	var h Header
 	if err := binary.Read(r, binary.LittleEndian, &h.Sync); err != nil {
 		return nil, err
@@ -42,21 +64,7 @@ func (p *Protocol) UnmarshalReader(r io.Reader) (*Message, error) {
 	if err := binary.Read(r, binary.LittleEndian, &h.DstEnt); err != nil {
 		return nil, err
 	}
-
-	m, err := p.UnmarshalFields(r, h.MGID)
-	if err != nil {
-		return nil, err
-	}
-	m.Header = h
-
-	// Read CRC (optional validation)
-	var crc uint16
-	if err := binary.Read(r, binary.LittleEndian, &crc); err != nil {
-		// Footer might be missing in some streams
-		return m, nil
-	}
-
-	return m, nil
+	return &h, nil
 }
 
 // UnmarshalFields reads the fields of a message given its MGID.

@@ -59,6 +59,19 @@ func (p *Protocol) CreateMessage(abbrev string) (*Message, error) {
 	}, nil
 }
 
+func (p *Protocol) GetField(mgid uint16, abbrev string) *XMLField {
+	msgDef, ok := p.Messages[mgid]
+	if !ok {
+		return nil
+	}
+	for i := range msgDef.Fields {
+		if msgDef.Fields[i].Abbrev == abbrev {
+			return &msgDef.Fields[i]
+		}
+	}
+	return nil
+}
+
 // Serialization and Deserialization implementation will go here.
 // I'll need a way to map IMC types (uint8_t, fp64_t, plaintext, etc.) to binary.
 
