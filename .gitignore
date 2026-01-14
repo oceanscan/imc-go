@@ -1,0 +1,37 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project-specific generated files
+# You might want to commit messages.go if you want the library to be usable
+# immediately after cloning without running the generator.
+# messages.go
+
+# Verification and media
+verification_run.png
+*.lsf
+
+# Large datasets
+data/
