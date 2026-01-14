@@ -33,30 +33,6 @@ To use `imc-go` in your own project:
    import "github.com/oceanscan/imc-go"
    ```
 
-## Publishing to Git
-
-To share this module on a platform like GitHub:
-
-1. **Update module name** in `go.mod`:
-   ```go
-   module github.com/username/imc-go
-   ```
-
-2. **Push to repository**:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git remote add origin https://github.com/username/imc-go.git
-   git push -u origin main
-   ```
-
-3. **Tag versions**:
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
-
 ## Getting Started
 
 ### Prerequisites
