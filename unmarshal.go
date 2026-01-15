@@ -39,8 +39,9 @@ func (p *Protocol) UnmarshalHeader(r io.Reader) (*Header, error) {
 	if err := binary.Read(r, binary.LittleEndian, &h.Sync); err != nil {
 		return nil, err
 	}
-	if h.Sync != 0xFE55 && h.Sync != 0x55FE {
-		return nil, fmt.Errorf("invalid sync number: 0x%04X", h.Sync)
+	swappedSync := (p.SyncWord << 8) | (p.SyncWord >> 8)
+	if h.Sync != p.SyncWord && h.Sync != swappedSync {
+		return nil, fmt.Errorf("invalid sync number: 0x%04X (expected 0x%04X)", h.Sync, p.SyncWord)
 	}
 
 	if err := binary.Read(r, binary.LittleEndian, &h.MGID); err != nil {

@@ -26,6 +26,7 @@ type Header struct {
 
 type Protocol struct {
 	Version  string
+	SyncWord uint16
 	Messages map[uint16]*XMLMessage
 	Lookup   map[string]*XMLMessage
 }
@@ -33,9 +34,24 @@ type Protocol struct {
 func NewProtocol(xmlProto *XMLProtocol) *Protocol {
 	p := &Protocol{
 		Version:  xmlProto.Version,
+		SyncWord: 0xFE55, // Default
 		Messages: make(map[uint16]*XMLMessage),
 		Lookup:   make(map[string]*XMLMessage),
 	}
+
+	for _, field := range xmlProto.Header {
+		if field.Abbrev == "sync" {
+			var val uint64
+			if _, err := fmt.Sscanf(field.Value, "0x%x", &val); err == nil {
+				p.SyncWord = uint16(val)
+			} else {
+				fmt.Sscanf(field.Value, "%d", &val)
+				p.SyncWord = uint16(val)
+			}
+			break
+		}
+	}
+
 	for i := range xmlProto.Messages {
 		msg := &xmlProto.Messages[i]
 		p.Messages[msg.ID] = msg
@@ -52,7 +68,7 @@ func (p *Protocol) CreateMessage(abbrev string) (*Message, error) {
 
 	return &Message{
 		Header: Header{
-			Sync: 0xFE55,
+			Sync: p.SyncWord,
 			MGID: msgDef.ID,
 		},
 		Fields: make(map[string]any),
@@ -83,6 +99,7 @@ func (m *Message) Serialize(p *Protocol) ([]byte, error) {
 
 	buf := new(bytes.Buffer)
 	m.Header.Size = uint16(len(payload))
+	m.Header.Sync = p.SyncWord
 	if m.Header.Timestamp == 0 {
 		m.Header.Timestamp = float64(time.Now().UnixNano()) / 1e9
 	}
