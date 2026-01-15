@@ -8,15 +8,40 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// findBundledExe looks for an executable in the same directory as logsync.
+// If found, returns the absolute path. Otherwise, returns just the name.
+func findBundledExe(name string) string {
+	exe, err := os.Executable()
+	if err != nil {
+		return name
+	}
+	dir := filepath.Dir(exe)
+	bundled := filepath.Join(dir, name)
+	if _, err := os.Stat(bundled); err == nil {
+		return bundled
+	}
+	// On Windows, try with .exe extension
+	if filepath.Ext(name) == "" {
+		bundled = filepath.Join(dir, name+".exe")
+		if _, err := os.Stat(bundled); err == nil {
+			return bundled
+		}
+	}
+	return name
+}
 
 func getpass(ip string) string {
 	data := fmt.Sprintf("%s//%s", ip, ip)
@@ -25,18 +50,46 @@ func getpass(ip string) string {
 }
 
 func testAuth(ip, password string) bool {
-	rshCmd := fmt.Sprintf("sshpass -p %s ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 root@%s exit", password, ip)
-	cmd := exec.Command("sh", "-c", rshCmd)
-	err := cmd.Run()
-	return err == nil
+	config := &ssh.ClientConfig{
+		User: "root",
+		Auth: []ssh.AuthMethod{
+			ssh.Password(password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+	client, err := ssh.Dial("tcp", ip+":22", config)
+	if err != nil {
+		return false
+	}
+	client.Close()
+	return true
 }
 
 func listRemoteDirs(ip, password, path string) ([]string, error) {
-	rshCmd := fmt.Sprintf("sshpass -p %s ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@%s ls -1 %s", password, ip, path)
-	cmd := exec.Command("sh", "-c", rshCmd)
+	config := &ssh.ClientConfig{
+		User: "root",
+		Auth: []ssh.AuthMethod{
+			ssh.Password(password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+	client, err := ssh.Dial("tcp", ip+":22", config)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return nil, err
+	}
+	defer session.Close()
+
 	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
+	session.Stdout = &out
+	if err := session.Run("ls -1 " + path); err != nil {
 		return nil, err
 	}
 
@@ -286,6 +339,10 @@ func main() {
 	interactive := flag.Bool("i", false, "Interactive mode to select folders and logs")
 	removeRemote := flag.Bool("rm", false, "Remove remote logs instead of syncing")
 	skipTypes := flag.String("skip", "", "Comma-separated list of file extensions to skip (e.g. 'mp4,txt')")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n", os.Args[0])
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 
 	// Validate required IP argument
@@ -395,26 +452,45 @@ func main() {
 		}
 
 		fmt.Println("\nDeleting remote logs...")
+		config := &ssh.ClientConfig{
+			User: "root",
+			Auth: []ssh.AuthMethod{
+				ssh.Password(password),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		}
+		client, err := ssh.Dial("tcp", *ip+":22", config)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error connecting for deletion: %v\n", err)
+			os.Exit(1)
+		}
+		defer client.Close()
+
 		for _, pattern := range datePatterns {
 			remotePath := *src
 			if pattern != "" {
 				remotePath = *src + "/" + pattern
 			}
 			fmt.Printf("Removing %s...\n", remotePath)
-			rshCmd := fmt.Sprintf("sshpass -p %s ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@%s rm -rf %s", password, *ip, remotePath)
-			cmd := exec.Command("sh", "-c", rshCmd)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
+
+			session, err := client.NewSession()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating session for %s: %v\n", remotePath, err)
+				continue
+			}
+			if err := session.Run("rm -rf " + remotePath); err != nil {
 				fmt.Fprintf(os.Stderr, "Error deleting %s: %v\n", remotePath, err)
 			}
+			session.Close()
 		}
 		fmt.Println("\nRemote deletion completed.")
 		return
 	}
 
 	// 3. Build rsync command
-	rshCmd := fmt.Sprintf("sshpass -p %s ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", password)
+	sshpassPath := findBundledExe("sshpass")
+	sshPath := findBundledExe("ssh")
+	rshCmd := fmt.Sprintf("%s -p %s %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", sshpassPath, password, sshPath)
 	remotePath := fmt.Sprintf("root@%s:%s", *ip, *src)
 
 	args := []string{
@@ -487,13 +563,28 @@ func main() {
 	}
 
 	dryArgs := append([]string{"-n"}, args...)
-	dryCmd := exec.Command("rsync", dryArgs...)
+	rsyncPath := findBundledExe("rsync")
+	dryCmd := exec.Command(rsyncPath, dryArgs...)
 	var dryOutput bytes.Buffer
 	dryCmd.Stdout = &dryOutput
 	dryCmd.Stderr = os.Stderr
 
 	if err := dryCmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "\nError: rsync dry run failed: %v\n", err)
+		if strings.Contains(err.Error(), "executable file not found") {
+			fmt.Fprintf(os.Stderr, "\nError: 'rsync' was not found in your system path.\n")
+			fmt.Fprintf(os.Stderr, "To run logsync, you must have rsync and ssh installed.\n")
+			if os.PathSeparator == '\\' {
+				fmt.Fprintf(os.Stderr, "On Windows, we recommend installing 'rsync' via:\n")
+				fmt.Fprintf(os.Stderr, " 1. WSL (Ubuntu): 'sudo apt install rsync'\n")
+				fmt.Fprintf(os.Stderr, " 2. MSYS2: 'pacman -S rsync'\n")
+				fmt.Fprintf(os.Stderr, " 3. Chocolatey: 'choco install rsync'\n")
+				fmt.Fprintf(os.Stderr, " 4. Git for Windows (if included): add 'C:\\Program Files\\Git\\usr\\bin' to your PATH\n")
+			} else {
+				fmt.Fprintf(os.Stderr, "On Linux/MacOS, install it via your package manager (e.g., 'sudo apt install rsync').\n")
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "\nError: rsync dry run failed: %v\n", err)
+		}
 		os.Exit(1)
 	}
 
@@ -531,7 +622,7 @@ func main() {
 	// 6. Perform actual transfer with progress
 	fmt.Println("\nStarting transfer...")
 	args = append([]string{"--progress"}, args...)
-	cmd := exec.Command("rsync", args...)
+	cmd := exec.Command(rsyncPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
