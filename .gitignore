@@ -38,3 +38,15 @@ data/
 
 # Build artifacts
 dist/
+
+# Compiled binaries
+/auto-logsync
+/logsync
+/multicast_listener
+/lsf2csv
+/lsf2json
+/parse_lsf
+/verify
+
+# Synced logs
+Logs/

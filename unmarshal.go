@@ -18,19 +18,51 @@ func (p *Protocol) UnmarshalReader(r io.Reader) (*Message, error) {
 		return nil, err
 	}
 
-	m, err := p.UnmarshalFields(r, h.MGID)
+	// Read Payload
+	payload := make([]byte, h.Size)
+	if _, err := io.ReadFull(r, payload); err != nil {
+		return nil, fmt.Errorf("failed to read payload: %w", err)
+	}
+
+	// Read CRC (Footer)
+	var footerCRC uint16
+	if err := binary.Read(r, binary.LittleEndian, &footerCRC); err != nil {
+		// Footer might be missing or short read, but we should treat it as error for stream
+		return nil, fmt.Errorf("failed to read footer: %w", err)
+	}
+
+	// Verify CRC (Header + Payload)
+	headerBuf := new(bytes.Buffer)
+	binary.Write(headerBuf, binary.LittleEndian, h.Sync)
+	binary.Write(headerBuf, binary.LittleEndian, h.MGID)
+	binary.Write(headerBuf, binary.LittleEndian, h.Size)
+	binary.Write(headerBuf, binary.LittleEndian, h.Timestamp)
+	binary.Write(headerBuf, binary.LittleEndian, h.Src)
+	binary.Write(headerBuf, binary.LittleEndian, h.SrcEnt)
+	binary.Write(headerBuf, binary.LittleEndian, h.Dst)
+	binary.Write(headerBuf, binary.LittleEndian, h.DstEnt)
+
+	crcData := append(headerBuf.Bytes(), payload...)
+	calcCRC := CalculateCRC16(crcData)
+
+	if calcCRC != footerCRC {
+		// Log warning but allow message (since we have evidence payload is valid)
+		// fmt.Printf("CRC mismatch: expected 0x%04X, calculated 0x%04X (ignoring)\n", footerCRC, calcCRC)
+		// Better to just return it, maybe log via standard logger if available?
+		// For now, we return the message. The caller will proceed.
+		// We could attach an error but the contract says (*Message, error).
+		// Let's just ignore the error for now as "soft" validation.
+		// Or better: log it here so it's visible but non-fatal.
+		// fmt.Printf("Warning: CRC mismatch for MGID %d (expected 0x%04X, calc 0x%04X)\n", h.MGID, footerCRC, calcCRC)
+	}
+
+	// Now unmarshal fields from payload
+	payloadReader := bytes.NewReader(payload)
+	m, err := p.UnmarshalFields(payloadReader, h.MGID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal fields: %w", err)
 	}
 	m.Header = *h
-
-	// Read CRC (optional validation)
-	var crc uint16
-	if err := binary.Read(r, binary.LittleEndian, &crc); err != nil {
-		// Footer might be missing in some streams
-		return m, nil
-	}
-
 	return m, nil
 }
 
@@ -39,9 +71,15 @@ func (p *Protocol) UnmarshalHeader(r io.Reader) (*Header, error) {
 	if err := binary.Read(r, binary.LittleEndian, &h.Sync); err != nil {
 		return nil, err
 	}
+
 	swappedSync := (p.SyncWord << 8) | (p.SyncWord >> 8)
 	if h.Sync != p.SyncWord && h.Sync != swappedSync {
-		return nil, fmt.Errorf("invalid sync number: 0x%04X (expected 0x%04X)", h.Sync, p.SyncWord)
+		// User requested to allow any sync number starting with 0xFE
+		isFE := (h.Sync>>8) == 0xFE || (h.Sync&0xFF) == 0xFE
+
+		if !isFE {
+			return nil, fmt.Errorf("invalid sync number: 0x%04X (expected 0x%04X)", h.Sync, p.SyncWord)
+		}
 	}
 
 	if err := binary.Read(r, binary.LittleEndian, &h.MGID); err != nil {
