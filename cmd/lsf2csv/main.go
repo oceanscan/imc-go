@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	lsfPath    = flag.String("lsf", "", "Path to Data.lsf (required)")
-	xmlPath    = flag.String("xml", "IMC.xml", "Path to IMC.xml")
+	lsfPath    = flag.String("lsf", "", "Path to Data.lsf or directory when using -R (required)")
+	xmlPath    = flag.String("xml", "IMC.xml", "Path to IMC.xml (auto-detected per directory in recursive mode)")
+	recursive  = flag.Bool("R", false, "Recursively find and convert all Data.lsf files under -lsf directory")
 	msgFilter  = flag.String("msg", "", "Comma-separated message types to export")
 	entFilter  = flag.String("entity", "", "Comma-separated entity names to filter by")
 	srcFilter  = flag.String("src", "", "Comma-separated source IDs to filter by")
@@ -60,62 +61,101 @@ func main() {
 		os.Exit(1)
 	}
 
-	xmlFile := *xmlPath
-	if xmlFile == "IMC.xml" {
-		// If default, check if it exists in the current directory
-		if _, err := os.Stat(xmlFile); os.IsNotExist(err) {
-			// Try same directory as LSF
-			alt := filepath.Join(filepath.Dir(*lsfPath), "IMC.xml")
-			if _, err := os.Stat(alt); err == nil {
-				xmlFile = alt
-			} else {
-				// Try .gz version
-				altGz := alt + ".gz"
-				if _, err := os.Stat(altGz); err == nil {
-					xmlFile = altGz
-				}
-			}
-		}
-	}
-
-	fmt.Printf("Loading protocol from %s...\n", xmlFile)
-	xmlR, _, err := openFile(xmlFile)
-	if err != nil {
-		log.Fatalf("Failed to open XML: %v", err)
-	}
-	xmlProto, err := imc.ParseReader(xmlR)
-	xmlR.Close()
-	if err != nil {
-		log.Fatalf("Failed to parse IMC XML: %v", err)
-	}
-	proto := imc.NewProtocol(xmlProto)
-
-	// Pre-scan for entities
-	fmt.Println("Scanning for entities...")
-	entityMap := buildEntityMap(*lsfPath, proto)
-	fmt.Printf("Found %d entities\n", len(entityMap))
-
-	// Parse filters into maps for O(1) lookup
 	msgsToExport := parseMap(*msgFilter)
 	entsToFilter := parseMap(*entFilter)
 	srcsToFilter := parseMap(*srcFilter)
 	fieldFilter := parseList(*fieldsFlag)
-
 	start, _ := parseTime(*startTime)
 	end, _ := parseTime(*endTime)
 
-	// Open LSF
-	f, totalSize, err := openFile(*lsfPath)
+	if *recursive {
+		root := *lsfPath
+		var lsfFiles []string
+		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && strings.EqualFold(info.Name(), "Data.lsf") {
+				lsfFiles = append(lsfFiles, path)
+			}
+			return nil
+		})
+		if err != nil {
+			log.Fatalf("Error walking directory: %v", err)
+		}
+		if len(lsfFiles) == 0 {
+			log.Fatalf("No Data.lsf files found under %s", root)
+		}
+		fmt.Printf("Found %d LSF file(s) to convert.\n", len(lsfFiles))
+		for i, lsf := range lsfFiles {
+			fmt.Printf("\n[%d/%d] %s\n", i+1, len(lsfFiles), lsf)
+			rel, _ := filepath.Rel(root, filepath.Dir(lsf))
+			dest := filepath.Join(*outDir, rel)
+			xmlFile := resolveXML(filepath.Dir(lsf), *xmlPath)
+			if err := convertLSF(lsf, xmlFile, dest, msgsToExport, entsToFilter, srcsToFilter, fieldFilter, start, end); err != nil {
+				log.Printf("Error processing %s: %v", lsf, err)
+			}
+		}
+	} else {
+		xmlFile := resolveXML(filepath.Dir(*lsfPath), *xmlPath)
+		if err := convertLSF(*lsfPath, xmlFile, *outDir, msgsToExport, entsToFilter, srcsToFilter, fieldFilter, start, end); err != nil {
+			log.Fatalf("%v", err)
+		}
+	}
+}
+
+func resolveXML(lsfDir, xmlFlag string) string {
+	// If the user gave an explicit non-default path, use it as-is.
+	if xmlFlag != "IMC.xml" {
+		return xmlFlag
+	}
+	// Try current working directory first.
+	if _, err := os.Stat(xmlFlag); err == nil {
+		return xmlFlag
+	}
+	// Try same directory as the LSF file.
+	alt := filepath.Join(lsfDir, "IMC.xml")
+	if _, err := os.Stat(alt); err == nil {
+		return alt
+	}
+	// Try gzip version next to the LSF file.
+	if _, err := os.Stat(alt + ".gz"); err == nil {
+		return alt + ".gz"
+	}
+	return xmlFlag
+}
+
+func convertLSF(lsfFilePath, xmlFile, outputDir string,
+	msgsToExport, entsToFilter, srcsToFilter map[string]bool,
+	fieldFilter []string, start, end float64) error {
+
+	fmt.Printf("Loading protocol from %s...\n", xmlFile)
+	xmlR, _, err := openFile(xmlFile)
 	if err != nil {
-		log.Fatalf("Failed to open LSF: %v", err)
+		return fmt.Errorf("failed to open XML: %w", err)
+	}
+	xmlProto, err := imc.ParseReader(xmlR)
+	xmlR.Close()
+	if err != nil {
+		return fmt.Errorf("failed to parse IMC XML: %w", err)
+	}
+	proto := imc.NewProtocol(xmlProto)
+
+	fmt.Println("Scanning for entities...")
+	entityMap := buildEntityMap(lsfFilePath, proto)
+	fmt.Printf("Found %d entities\n", len(entityMap))
+
+	f, totalSize, err := openFile(lsfFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to open LSF: %w", err)
 	}
 	defer f.Close()
 
 	cr := &CountingReader{r: f}
-	br := bufio.NewReaderSize(cr, 64*1024) // 64KB buffer
+	br := bufio.NewReaderSize(cr, 64*1024)
 
-	if err := os.MkdirAll(*outDir, 0755); err != nil {
-		log.Fatalf("Failed to create output directory: %v", err)
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	exports := make(map[string]*CsvExport)
@@ -143,7 +183,6 @@ func main() {
 
 		msgDef := proto.Messages[header.MGID]
 		if msgDef == nil {
-			// Skip unknown message payload + CRC
 			io.CopyN(io.Discard, br, int64(header.Size)+2)
 			continue
 		}
@@ -151,7 +190,6 @@ func main() {
 		abbrev := msgDef.Abbrev
 		filterOut := false
 
-		// Fast Filtering
 		if len(msgsToExport) > 0 && !msgsToExport[abbrev] {
 			filterOut = true
 		} else if len(entsToFilter) > 0 && !entsToFilter[entityMap[uint8(header.SrcEnt)]] {
@@ -165,27 +203,23 @@ func main() {
 		if filterOut {
 			io.CopyN(io.Discard, br, int64(header.Size)+2)
 		} else {
-			// Decode Payload
 			msg, err := proto.UnmarshalFields(br, header.MGID)
 			if err != nil {
 				fmt.Printf("\nError decoding payload for %s at msg %d: %v\n", abbrev, count, err)
 				break
 			}
 			msg.Header = *header
-			// Skip CRC
 			io.CopyN(io.Discard, br, 2)
 
-			// Get or create CSV export
 			exp, ok := exports[abbrev]
 			if !ok {
-				exp, err = createExport(abbrev, msgDef, fieldFilter, proto)
+				exp, err = createExport(abbrev, msgDef, fieldFilter, outputDir, proto)
 				if err != nil {
-					log.Fatalf("Failed to create export for %s: %v", abbrev, err)
+					return fmt.Errorf("failed to create export for %s: %w", abbrev, err)
 				}
 				exports[abbrev] = exp
 			}
 
-			// Write row
 			row := make([]string, len(exp.Fields))
 			for i, fName := range exp.Fields {
 				val := getFieldValue(msg, fName, proto)
@@ -202,7 +236,8 @@ func main() {
 	}
 
 	fmt.Printf("\rProcessed %d messages, exported %d (100.0%%)   \n", count, exportedCount)
-	fmt.Printf("Done. Exported to %d files.\n", len(exports))
+	fmt.Printf("Done. Exported to %d files in %s\n", len(exports), outputDir)
+	return nil
 }
 
 func buildEntityMap(path string, proto *imc.Protocol) map[uint8]string {
@@ -291,8 +326,8 @@ func (g *gzipReadCloser) Close() error {
 	return err2
 }
 
-func createExport(abbrev string, msgDef *imc.XMLMessage, fieldFilter []string, proto *imc.Protocol) (*CsvExport, error) {
-	path := filepath.Join(*outDir, abbrev+".csv")
+func createExport(abbrev string, msgDef *imc.XMLMessage, fieldFilter []string, outputDir string, proto *imc.Protocol) (*CsvExport, error) {
+	path := filepath.Join(outputDir, abbrev+".csv")
 	f, err := os.Create(path)
 	if err != nil {
 		return nil, err
