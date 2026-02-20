@@ -26,6 +26,12 @@ cd imc-go
 go build -o lsf2csv ./cmd/lsf2csv
 ```
 
+Or install directly (Go 1.21+):
+
+```sh
+go install github.com/oceanscan/imc-go/cmd/lsf2csv@latest
+```
+
 Cross-compile for a different platform (example: Linux ARM64):
 
 ```sh
