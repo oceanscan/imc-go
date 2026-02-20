@@ -432,12 +432,3 @@ func parseTime(s string) (float64, error) {
 	}
 	return 0, err
 }
-
-func contains(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
