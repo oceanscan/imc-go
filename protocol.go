@@ -330,9 +330,9 @@ func ToGenericMessageList(v any) []*Message {
 }
 
 func CalculateCRC16(data []byte) uint16 {
-	var crc uint16 = 0xFFFF
-	// Simplistic CRC16 calculation - needs to be the specific one used by IMC (usually CCITT or IBM)
-	// IMC typically uses CRC-16-IBM (poly 0x8005)
+	var crc uint16 = 0x0000
+	// CRC-16-IBM (poly 0x8005, reflected as 0xA001, init 0x0000)
+	// Must match DUNE's Algorithms::CRC16::compute() which uses init=0.
 	for _, b := range data {
 		crc ^= uint16(b)
 		for i := 0; i < 8; i++ {
