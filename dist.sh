@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-VERSION="${VERSION:-1.0.0}"
+VERSION="${VERSION:-1.2.0}"
 DIST_DIR="dist"
 COMMANDS=("multicast_listener" "lsf2csv" "lsf2json" "lsfmerge" "lsfsplit" "logsync" "parse_lsf" "estate_positions")
 PLATFORMS=(
