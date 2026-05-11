@@ -3,7 +3,7 @@
 # Configuration
 VERSION="${VERSION:-1.0.0}"
 DIST_DIR="dist"
-COMMANDS=("multicast_listener" "lsf2csv" "lsf2json" "lsfmerge" "lsfsplit" "logsync")
+COMMANDS=("multicast_listener" "lsf2csv" "lsf2json" "lsfmerge" "lsfsplit" "logsync" "parse_lsf" "estate_positions")
 PLATFORMS=(
     "linux/amd64"
     "linux/arm64"
