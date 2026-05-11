@@ -155,6 +155,12 @@ Parses a binary `.lsf` log file and prints message statistics.
 go run cmd/parse_lsf/main.go
 ```
 
+### 3. EstimatedState Positions
+Extracts absolute latitude/longitude (in degrees) for every `EstimatedState` message in an LSF log by displacing the geodetic reference `(Lat, Lon)` by the NED offset `(X, Y)` on the WGS84 ellipsoid. Output is CSV.
+```bash
+go run cmd/estate_positions/main.go IMC.xml Data.lsf > positions.csv
+```
+
 ### 4. Code Generator
 Updates the typed message structs in `messages.go` based on the current `IMC.xml`.
 ```bash
