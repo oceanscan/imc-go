@@ -63,3 +63,73 @@ func TestCRC(t *testing.T) {
 	// Let's just verify consistency for now.
 	t.Logf("CRC of '123456789': 0x%04X", crc)
 }
+
+func TestInt16Conversion(t *testing.T) {
+	// Test for the int16_t parsing bug fix
+	// Verify that int16 values are correctly handled in ToInt16 and ToInt64 conversions
+	
+	testCases := []int16{
+		0,
+		500,
+		1000,
+		-100,
+		-32768, // Min int16
+		32767,  // Max int16
+	}
+	
+	for _, testVal := range testCases {
+		// Test ToInt16 directly
+		result := ToInt16(testVal)
+		if result != testVal {
+			t.Errorf("ToInt16(%d) = %d, want %d", testVal, result, testVal)
+		}
+		
+		// Test ToInt64 (which is called by ToInt16)
+		result64 := ToInt64(testVal)
+		if result64 != int64(testVal) {
+			t.Errorf("ToInt64(%d) = %d, want %d", testVal, result64, testVal)
+		}
+	}
+	
+	// Test with generic Message and FromMessage conversion
+	xmlProto, err := ParseXML("IMC.xml")
+	if err != nil {
+		t.Fatalf("Failed to parse IMC.xml: %v", err)
+	}
+	p := NewProtocol(xmlProto)
+	
+	// Create an RPM message (which has an int16_t field)
+	msg, err := p.CreateMessage("Rpm")
+	if err != nil {
+		t.Fatalf("Failed to create Rpm message: %v", err)
+	}
+	
+	testRpmValue := int16(1234)
+	msg.Fields["value"] = testRpmValue
+	
+	// Serialize and deserialize
+	data, err := msg.Serialize(p)
+	if err != nil {
+		t.Fatalf("Failed to serialize Rpm message: %v", err)
+	}
+	
+	newMsg, err := p.Unmarshal(data)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal Rpm message: %v", err)
+	}
+	
+	// Test generic message fields
+	if newMsg.Fields["value"].(int16) != testRpmValue {
+		t.Errorf("Generic message value mismatch: expected %d, got %d", testRpmValue, newMsg.Fields["value"])
+	}
+	
+	// Test FromMessage conversion to typed struct
+	rpm := &Rpm{}
+	if err := rpm.FromMessage(newMsg); err != nil {
+		t.Fatalf("Failed to convert to typed Rpm: %v", err)
+	}
+	
+	if rpm.Value != testRpmValue {
+		t.Errorf("Typed Rpm value mismatch: expected %d, got %d", testRpmValue, rpm.Value)
+	}
+}

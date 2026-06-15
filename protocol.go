@@ -254,17 +254,21 @@ func ToInt64(v any) int64 {
 	switch x := v.(type) {
 	case int:
 		return int64(x)
+	case int8:
+		return int64(x)
+	case int16:
+		return int64(x)
+	case int32:
+		return int64(x)
 	case int64:
 		return x
-	case float64:
+	case uint8:
 		return int64(x)
 	case uint16:
 		return int64(x)
-	case uint8:
-		return int64(x)
 	case uint32:
 		return int64(x)
-	case int32:
+	case float64:
 		return int64(x)
 	}
 	return 0
@@ -284,6 +288,20 @@ func ToFloat64(v any) float64 {
 	case float32:
 		return float64(x)
 	case int:
+		return float64(x)
+	case int8:
+		return float64(x)
+	case int16:
+		return float64(x)
+	case int32:
+		return float64(x)
+	case int64:
+		return float64(x)
+	case uint8:
+		return float64(x)
+	case uint16:
+		return float64(x)
+	case uint32:
 		return float64(x)
 	}
 	return 0
