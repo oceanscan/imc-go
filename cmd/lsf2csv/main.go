@@ -140,6 +140,7 @@ func convertLSF(lsfFilePath, xmlFile, outputDir string,
 		return fmt.Errorf("failed to parse IMC XML: %w", err)
 	}
 	proto := imc.NewProtocol(xmlProto)
+	proto.Lenient = true // logs and other systems: accept what the old codec accepted
 
 	fmt.Println("Scanning for entities...")
 	entityMap := buildEntityMap(lsfFilePath, proto)

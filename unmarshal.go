@@ -1,231 +1,211 @@
 package imc
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 )
 
+// Unmarshal decodes exactly one frame (e.g. a UDP datagram). In strict mode
+// (the default) the sync number, the frame length and the CRC are checked
+// (see Protocol); big endian frames are decoded as big endian.
 func (p *Protocol) Unmarshal(data []byte) (*Message, error) {
-	buf := bytes.NewReader(data)
-	return p.UnmarshalReader(buf)
-}
-
-func (p *Protocol) UnmarshalReader(r io.Reader) (*Message, error) {
-	h, err := p.UnmarshalHeader(r)
+	h, be, err := p.parseHeader(data)
 	if err != nil {
 		return nil, err
 	}
-
-	// Read Payload
-	payload := make([]byte, h.Size)
-	if _, err := io.ReadFull(r, payload); err != nil {
-		return nil, fmt.Errorf("failed to read payload: %w", err)
+	n := HeaderSize + int(h.Size)
+	if len(data) < n+FooterSize || (!p.Lenient && len(data) != n+FooterSize) {
+		return nil, fmt.Errorf("%w: %d bytes, header says %d", ErrLength, len(data), n+FooterSize)
 	}
-
-	// Read CRC (Footer)
-	var footerCRC uint16
-	if err := binary.Read(r, binary.LittleEndian, &footerCRC); err != nil {
-		// Footer might be missing or short read, but we should treat it as error for stream
-		return nil, fmt.Errorf("failed to read footer: %w", err)
+	if !p.Lenient && CRC16(data[:n]) != readU16(data[n:], be) {
+		return nil, ErrCRC
 	}
+	return p.decodeFrame(h, be, data[HeaderSize:n])
+}
 
-	// Verify CRC (Header + Payload)
-	headerBuf := new(bytes.Buffer)
-	binary.Write(headerBuf, binary.LittleEndian, h.Sync)
-	binary.Write(headerBuf, binary.LittleEndian, h.MGID)
-	binary.Write(headerBuf, binary.LittleEndian, h.Size)
-	binary.Write(headerBuf, binary.LittleEndian, h.Timestamp)
-	binary.Write(headerBuf, binary.LittleEndian, h.Src)
-	binary.Write(headerBuf, binary.LittleEndian, h.SrcEnt)
-	binary.Write(headerBuf, binary.LittleEndian, h.Dst)
-	binary.Write(headerBuf, binary.LittleEndian, h.DstEnt)
+// DecodeFrame decodes a frame returned by a FrameReader.
+func (p *Protocol) DecodeFrame(f Frame) (*Message, error) {
+	return p.decodeFrame(f.Header, f.BigEndian, f.Payload)
+}
 
-	crcData := append(headerBuf.Bytes(), payload...)
-	calcCRC := CalculateCRC16(crcData)
-
-	if calcCRC != footerCRC {
-		// Log warning but allow message (since we have evidence payload is valid)
-		// fmt.Printf("CRC mismatch: expected 0x%04X, calculated 0x%04X (ignoring)\n", footerCRC, calcCRC)
-		// Better to just return it, maybe log via standard logger if available?
-		// For now, we return the message. The caller will proceed.
-		// We could attach an error but the contract says (*Message, error).
-		// Let's just ignore the error for now as "soft" validation.
-		// Or better: log it here so it's visible but non-fatal.
-		// fmt.Printf("Warning: CRC mismatch for MGID %d (expected 0x%04X, calc 0x%04X)\n", h.MGID, footerCRC, calcCRC)
-	}
-
-	// Now unmarshal fields from payload
-	payloadReader := bytes.NewReader(payload)
-	m, err := p.UnmarshalFields(payloadReader, h.MGID)
+func (p *Protocol) decodeFrame(h Header, be bool, payload []byte) (*Message, error) {
+	m, _, err := p.decodeFields(payload, h.MGID, be)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal fields: %w", err)
 	}
-	m.Header = *h
+	m.Header = h
 	return m, nil
 }
 
-func (p *Protocol) UnmarshalHeader(r io.Reader) (*Header, error) {
-	var h Header
-	if err := binary.Read(r, binary.LittleEndian, &h.Sync); err != nil {
+// UnmarshalReader reads one frame from r (header, payload and CRC) and
+// decodes it, with the checks of Unmarshal. It does not resynchronize after
+// garbage: use a FrameReader for streams that may be corrupted.
+func (p *Protocol) UnmarshalReader(r io.Reader) (*Message, error) {
+	var hb [HeaderSize]byte
+	if _, err := io.ReadFull(r, hb[:]); err != nil {
 		return nil, err
 	}
-
-	swappedSync := (p.SyncWord << 8) | (p.SyncWord >> 8)
-	if h.Sync != p.SyncWord && h.Sync != swappedSync {
-		// User requested to allow any sync number starting with 0xFE
-		isFE := (h.Sync>>8) == 0xFE || (h.Sync&0xFF) == 0xFE
-
-		if !isFE {
-			return nil, fmt.Errorf("invalid sync number: 0x%04X (expected 0x%04X)", h.Sync, p.SyncWord)
+	h, be, err := p.parseHeader(hb[:])
+	if err != nil {
+		return nil, err
+	}
+	rest := make([]byte, int(h.Size)+FooterSize)
+	if _, err := io.ReadFull(r, rest); err != nil {
+		return nil, fmt.Errorf("failed to read payload: %w", err)
+	}
+	payload := rest[:h.Size]
+	if !p.Lenient {
+		crc := UpdateCRC16(CRC16(hb[:]), payload)
+		if crc != readU16(rest[h.Size:], be) {
+			return nil, ErrCRC
 		}
 	}
+	return p.decodeFrame(h, be, payload)
+}
 
-	if err := binary.Read(r, binary.LittleEndian, &h.MGID); err != nil {
+// parseHeader checks the sync number (see Protocol) and decodes a header.
+func (p *Protocol) parseHeader(b []byte) (Header, bool, error) {
+	if len(b) < HeaderSize {
+		return Header{}, false, ErrShort
+	}
+	be, ok := syncOrder(b[0], b[1], p.SyncWord)
+	if !ok {
+		if !p.Lenient || (b[0] != 0xFE && b[1] != 0xFE) {
+			return Header{}, false, fmt.Errorf("%w: 0x%02X%02X (expected 0x%04X)", ErrSync, b[1], b[0], p.SyncWord)
+		}
+		// Lenient: another IMC sync number (e.g. 0xFE54): little endian.
+		h := decodeHeader(b, false)
+		return h, false, nil
+	}
+	h := decodeHeader(b, be)
+	h.Sync = p.SyncWord
+	return h, be, nil
+}
+
+// UnmarshalHeader reads and decodes a header from r.
+func (p *Protocol) UnmarshalHeader(r io.Reader) (*Header, error) {
+	var hb [HeaderSize]byte
+	if _, err := io.ReadFull(r, hb[:]); err != nil {
 		return nil, err
 	}
-	if err := binary.Read(r, binary.LittleEndian, &h.Size); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &h.Timestamp); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &h.Src); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &h.SrcEnt); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &h.Dst); err != nil {
-		return nil, err
-	}
-	if err := binary.Read(r, binary.LittleEndian, &h.DstEnt); err != nil {
+	h, _, err := p.parseHeader(hb[:])
+	if err != nil {
 		return nil, err
 	}
 	return &h, nil
 }
 
-// UnmarshalFields reads the fields of a message given its MGID.
-// This is used for nested messages which don't have the full header.
+// UnmarshalFields decodes the (little endian) fields of a message of the
+// given id from the rest of r.
 func (p *Protocol) UnmarshalFields(r io.Reader, mgid uint16) (*Message, error) {
-	msgDef, ok := p.Messages[mgid]
-	if !ok {
-		return nil, fmt.Errorf("unknown message ID: %d", mgid)
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
 	}
-
-	m := &Message{
-		Header: Header{MGID: mgid},
-		Fields: make(map[string]any),
-	}
-
-	for _, field := range msgDef.Fields {
-		val, err := p.readField(r, field.Type)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read field %s: %w", field.Abbrev, err)
-		}
-		m.Fields[field.Abbrev] = val
-	}
-
-	return m, nil
+	m, _, err := p.decodeFields(data, mgid, false)
+	return m, err
 }
 
-func (p *Protocol) readField(r io.Reader, typ string) (any, error) {
+// decodeFields decodes the fields of message mgid from b. @return the
+// message and the number of bytes used.
+func (p *Protocol) decodeFields(b []byte, mgid uint16, be bool) (*Message, int, error) {
+	msgDef, ok := p.Messages[mgid]
+	if !ok {
+		return nil, 0, &UnknownMessageError{mgid}
+	}
+	m := &Message{
+		Header: Header{MGID: mgid},
+		Fields: make(map[string]any, len(msgDef.Fields)),
+	}
+	off := 0
+	for _, field := range msgDef.Fields {
+		val, n, err := p.readField(b[off:], field.Type, be)
+		if err != nil {
+			return nil, off, fmt.Errorf("failed to read field %s.%s: %w", msgDef.Abbrev, field.Abbrev, err)
+		}
+		off += n
+		m.Fields[field.Abbrev] = val
+	}
+	return m, off, nil
+}
+
+var primSize = map[string]int{
+	"int8_t": 1, "uint8_t": 1, "int16_t": 2, "uint16_t": 2, "int32_t": 4, "uint32_t": 4,
+	"int64_t": 8, "fp32_t": 4, "fp64_t": 8,
+}
+
+func (p *Protocol) readField(b []byte, typ string, be bool) (any, int, error) {
+	if n, ok := primSize[typ]; ok && len(b) < n {
+		return nil, 0, ErrShort
+	}
 	switch typ {
 	case "int8_t":
-		var v int8
-		err := binary.Read(r, binary.LittleEndian, &v)
-		return v, err
+		return int8(b[0]), 1, nil
 	case "uint8_t":
-		var v uint8
-		err := binary.Read(r, binary.LittleEndian, &v)
-		return v, err
+		return b[0], 1, nil
 	case "int16_t":
-		var v int16
-		err := binary.Read(r, binary.LittleEndian, &v)
-		return v, err
+		return int16(readU16(b, be)), 2, nil
 	case "uint16_t":
-		var v uint16
-		err := binary.Read(r, binary.LittleEndian, &v)
-		return v, err
+		return readU16(b, be), 2, nil
 	case "int32_t":
-		var v int32
-		err := binary.Read(r, binary.LittleEndian, &v)
-		return v, err
+		return int32(readU32(b, be)), 4, nil
 	case "uint32_t":
-		var v uint32
-		err := binary.Read(r, binary.LittleEndian, &v)
-		return v, err
+		return readU32(b, be), 4, nil
 	case "int64_t":
-		var v int64
-		err := binary.Read(r, binary.LittleEndian, &v)
-		return v, err
+		return int64(readU64(b, be)), 8, nil
 	case "fp32_t":
-		var v float32
-		err := binary.Read(r, binary.LittleEndian, &v)
-		return v, err
+		return math.Float32frombits(readU32(b, be)), 4, nil
 	case "fp64_t":
-		var v float64
-		err := binary.Read(r, binary.LittleEndian, &v)
-		return v, err
-	case "plaintext":
-		var size uint16
-		if err := binary.Read(r, binary.LittleEndian, &size); err != nil {
-			return nil, err
+		return math.Float64frombits(readU64(b, be)), 8, nil
+	case "plaintext", "rawdata":
+		if len(b) < 2 {
+			return nil, 0, ErrShort
 		}
-		if size == 0 {
-			return "", nil
+		n := int(readU16(b, be))
+		if len(b)-2 < n {
+			return nil, 2, ErrShort
 		}
-		b := make([]byte, size)
-		if _, err := io.ReadFull(r, b); err != nil {
-			return nil, err
+		if typ == "plaintext" {
+			return string(b[2 : 2+n]), 2 + n, nil
 		}
-		return string(b), nil
-	case "rawdata":
-		var size uint16
-		if err := binary.Read(r, binary.LittleEndian, &size); err != nil {
-			return nil, err
-		}
-		if size == 0 {
-			return []byte{}, nil
-		}
-		b := make([]byte, size)
-		if _, err := io.ReadFull(r, b); err != nil {
-			return nil, err
-		}
-		return b, nil
+		return cloneBytes(b[2 : 2+n]), 2 + n, nil
 	case "message":
-		var mgid uint16
-		if err := binary.Read(r, binary.LittleEndian, &mgid); err != nil {
-			return nil, err
+		if len(b) < 2 {
+			return nil, 0, ErrShort
 		}
-		if mgid == 0xFFFF {
-			return nil, nil
+		id := readU16(b, be)
+		if id == NullID {
+			return nil, 2, nil
 		}
-		return p.UnmarshalFields(r, mgid)
+		m, n, err := p.decodeFields(b[2:], id, be)
+		return m, 2 + n, err
 	case "message-list":
-		var count uint16
-		if err := binary.Read(r, binary.LittleEndian, &count); err != nil {
-			return nil, err
+		if len(b) < 2 {
+			return nil, 0, ErrShort
 		}
-		res := make([]*Message, count)
-		for i := uint16(0); i < count; i++ {
-			var mgid uint16
-			if err := binary.Read(r, binary.LittleEndian, &mgid); err != nil {
-				return nil, err
+		count := int(readU16(b, be))
+		off := 2
+		res := make([]*Message, 0, min(count, len(b)/2))
+		for i := 0; i < count; i++ {
+			if len(b)-off < 2 {
+				return nil, off, ErrShort
 			}
-			if mgid == 0xFFFF {
-				res[i] = nil
+			id := readU16(b[off:], be)
+			off += 2
+			if id == NullID {
+				res = append(res, nil)
 				continue
 			}
-			m, err := p.UnmarshalFields(r, mgid)
+			m, n, err := p.decodeFields(b[off:], id, be)
+			off += n
 			if err != nil {
-				return nil, err
+				return nil, off, err
 			}
-			res[i] = m
+			res = append(res, m)
 		}
-		return res, nil
+		return res, off, nil
 	default:
-		return nil, fmt.Errorf("unknown type: %s", typ)
+		return nil, 0, fmt.Errorf("unknown type: %s", typ)
 	}
 }

@@ -55,6 +55,7 @@ func main() {
 		log.Fatalf("Failed to parse IMC XML: %v", err)
 	}
 	proto := imc.NewProtocol(xmlProto)
+	proto.Lenient = true // logs and other systems: accept what the old codec accepted
 
 	// Pre-scan for entities and source names
 	fmt.Fprintf(os.Stderr, "Scanning for systems and entities...\n")

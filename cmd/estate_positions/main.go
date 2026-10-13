@@ -88,6 +88,7 @@ func main() {
 		log.Fatalf("parse IMC.xml: %v", err)
 	}
 	proto := imc.NewProtocol(xmlProto)
+	proto.Lenient = true // logs and other systems: accept what the old codec accepted
 
 	f, err := openMaybeGz(lsfPath)
 	if err != nil {

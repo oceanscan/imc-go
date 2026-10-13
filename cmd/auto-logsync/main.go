@@ -249,6 +249,7 @@ func main() {
 		log.Fatalf("Failed to parse IMC.xml: %v", err)
 	}
 	proto := imc.NewProtocol(xmlProto)
+	proto.Lenient = true // logs and other systems: accept what the old codec accepted
 
 	group := "224.0.75.69"
 	ports := []int{30100, 30101, 30102, 30103, 30104}

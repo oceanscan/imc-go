@@ -52,6 +52,7 @@ func main() {
 		log.Fatalf("Failed to parse IMC XML: %v", err)
 	}
 	proto := imc.NewProtocol(xmlProto)
+	proto.Lenient = true // logs and other systems: accept what the old codec accepted
 
 	if err := merge(proto, flag.Args(), *outPath); err != nil {
 		log.Fatalf("%v", err)

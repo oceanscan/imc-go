@@ -58,6 +58,7 @@ func main() {
 		log.Fatalf("Failed to parse IMC.xml: %v", err)
 	}
 	proto := imc.NewProtocol(xmlProto)
+	proto.Lenient = true // logs and other systems: accept what the old codec accepted
 
 	fmt.Printf("Opening data file %s...\n", dataPath)
 	f, err := openMaybeGz(dataPath)

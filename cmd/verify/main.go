@@ -14,6 +14,7 @@ func main() {
 		log.Fatalf("Failed to parse IMC.xml: %v", err)
 	}
 	proto := imc.NewProtocol(xmlProto)
+	proto.Lenient = true // logs and other systems: accept what the old codec accepted
 
 	// Listener
 	listener, err := imc.NewUDPTransporter(proto, "0.0.0.0:6002")

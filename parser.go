@@ -1,6 +1,8 @@
 package imc
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -18,6 +20,8 @@ type XMLProtocol struct {
 	Header    []XMLField        `xml:"header>field"`
 	Footer    []XMLField        `xml:"footer>field"`
 	Messages  []XMLMessage      `xml:"message"`
+	// MD5 of the XML document as read (hexadecimal, lower case).
+	MD5 string `xml:"-"`
 }
 
 type XMLType struct {
@@ -70,8 +74,9 @@ type XMLField struct {
 	Value    string     `xml:"value,attr"`
 	Fixed    bool       `xml:"fixed,attr"`
 	EnumDef  string     `xml:"enum-def,attr"`
-	Bitfield string     `xml:"bitfield-def,attr"` // Check if it's bitfield or bitfield-def in XML
-	Values   []XMLValue `xml:"value"`             // Inline values for enums/bitfields
+	Bitfield string     `xml:"bitfield-def,attr"`
+	MsgType  string     `xml:"message-type,attr"`
+	Values   []XMLValue `xml:"value"` // Inline values for enums/bitfields
 }
 
 func ParseXML(path string) (*XMLProtocol, error) {
@@ -86,9 +91,13 @@ func ParseXML(path string) (*XMLProtocol, error) {
 
 func ParseReader(r io.Reader) (*XMLProtocol, error) {
 	var proto XMLProtocol
-	decoder := xml.NewDecoder(r)
+	h := md5.New()
+	decoder := xml.NewDecoder(io.TeeReader(r, h))
 	if err := decoder.Decode(&proto); err != nil {
 		return nil, fmt.Errorf("failed to decode IMC XML: %w", err)
 	}
+	// Hash what follows the root element too (the MD5 is of the file).
+	io.Copy(h, r)
+	proto.MD5 = hex.EncodeToString(h.Sum(nil))
 	return &proto, nil
 }
