@@ -149,6 +149,7 @@ type Bus struct {
 	connected     bool
 	ready         bool
 	reported      bool
+	confirming    bool // a first answer lacked one of our entities: asked once more
 	reportPending bool
 	lastReport    string
 	newMirrored   []*entity
@@ -733,6 +734,17 @@ func (b *Bus) checkMirrored() {
 
 // -- receiving -------------------------------------------------------------------------
 
+// anyUnmirrored tells whether the server's last report lacks one of our
+// entities.
+func (b *Bus) anyUnmirrored() bool {
+	for _, e := range b.entities {
+		if e.serverID < 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // onMessage handles a message from the server. It returns functions to
 // call once mu is released, and whether to close the connection.
 func (b *Bus) onMessage(m imc.IMessage) (after []func(), closeConn bool) {
@@ -743,7 +755,13 @@ func (b *Bus) onMessage(m imc.IMessage) (after []func(), closeConn bool) {
 			if !ok {
 				return nil, true
 			}
-			if b.reported && !b.ready {
+			if b.reported && !b.ready && !b.confirming && b.anyUnmirrored() {
+				// It looks like a refusal, but a report the server sent
+				// before it applied ours (a broadcast crossing our report)
+				// looks the same: ask once more, and the next answer tells.
+				b.confirming = true
+				b.control(&imc.EntityList{Op: imc.EntityListOp_QUERY})
+			} else if b.reported && !b.ready {
 				// The answer to the query that followed our report: the
 				// server's mirrors of our entities (or refusals) are known.
 				b.ready = true
@@ -945,7 +963,7 @@ func (b *Bus) session(ctx context.Context, conn net.Conn) {
 	b.connected, b.ready = true, false
 	b.peer, b.peerProto, b.peerReport = map[string]string{}, 0, ""
 	b.imcMismatch, b.lastReport = "", ""
-	b.reportPending, b.reported = false, false
+	b.reportPending, b.reported, b.confirming = false, false, false
 	for _, e := range b.entities {
 		e.refused, e.warnedLabel = false, ""
 	}

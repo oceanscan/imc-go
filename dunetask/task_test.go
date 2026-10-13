@@ -369,6 +369,27 @@ func TestLabelCollisionRefusedWithStrict(t *testing.T) {
 	}
 }
 
+// A report the server sent before it applied ours is not taken for a
+// refusal: the handshake ends on an answer that reflects our report.
+func TestReportCrossingOursIsNotARefusal(t *testing.T) {
+	srv := start(t, dunetest.Config{CrossingReport: true})
+	task := dunetask.New("Watcher")
+	atReady := make(chan []string, 4)
+	task.OnReady = func() { atReady <- task.Bus().Unmirrored() }
+	run(t, srv, dunetask.Options{}, task)
+	select {
+	case u := <-atReady:
+		if len(u) != 0 {
+			t.Fatalf("ready with entities taken as refused: %v", u)
+		}
+	case <-time.After(wait):
+		t.Fatal("handshake not done")
+	}
+	n := since(srv)
+	task.Inf("hello")
+	waitMsg(t, srv, n, func(m *imc.LogBookEntry) bool { return m.Text == "hello" })
+}
+
 func TestLabelCollisionPrefixedWithoutStrict(t *testing.T) {
 	srv := start(t, dunetest.Config{})
 	task := dunetask.New("Navigation")

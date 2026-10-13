@@ -54,6 +54,10 @@ type Config struct {
 	Path string
 	// Name is the server's #name (default "dune:fake").
 	Name string
+	// CrossingReport sends the first report twice to each client, the
+	// second before reading the client's report, as when DUNE broadcasts a
+	// report (for another peer) that crosses the client's own.
+	CrossingReport bool
 }
 
 // Client is a connection to the fake server.
@@ -401,6 +405,9 @@ func (s *FakeDune) accept() {
 		}
 		s.clients = append(s.clients, c)
 		s.write(c, &imc.EntityList{Op: imc.EntityListOp_REPORT, List: s.report()})
+		if s.cfg.CrossingReport {
+			s.write(c, &imc.EntityList{Op: imc.EntityListOp_REPORT, List: s.report()})
+		}
 		s.mu.Unlock()
 		s.wg.Add(1)
 		go s.serve(c)
