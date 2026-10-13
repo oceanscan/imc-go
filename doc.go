@@ -7,7 +7,8 @@
 //     types with their constants, typed message lists, and direct encoders
 //     and decoders (no reflection, no maps) for both byte orders. Marshal,
 //     AppendFrame, Decode and FrameReader work with them. This is what
-//     programs that talk to DUNE use (see package dunetask);
+//     programs that talk to DUNE use (see DUNE's Go task SDK, package
+//     dunetask in DUNE's sdk/go);
 //   - the dynamic codec (Protocol, Message): fields in a map, driven by any
 //     IMC XML at run time. This is what log tools use, since every LSF log
 //     carries the IMC.xml it was written with.

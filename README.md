@@ -14,9 +14,8 @@ Neptus and the LSTS toolchain, and an SDK to write DUNE tasks in Go.
   work with fields in a `map[string]any` (what the log tools use).
 - **Strict by default**: sync number, CRC, frame length and sizes checked;
   big endian frames decoded as big endian; a lenient mode for log forensics.
-- **`dunetask`**: DUNE tasks in Go, as peers of DUNE's distributed bus
-  (entities, parameters, activation, logging, subscriptions, reconnection),
-  with a fake DUNE for tests. See [dunetask/README.md](dunetask/README.md).
+- The codec of DUNE's Go task SDK (`dunetask`), which lives in DUNE's tree
+  (`sdk/go`, module `github.com/oceanscan/dune/sdk/go`).
 - **UDP Transporter**: unicast and multicast (`SO_REUSEADDR`/`SO_REUSEPORT`).
 - **Tools** (`cmd/`, a module of its own): LSF log converters, mergers,
   splitters, log synchronization (TUI).
@@ -217,8 +216,8 @@ cd cmd && go run ./estate_positions ../IMC.xml Data.lsf > positions.csv
 ```
 
 ### 4. DUNE Tasks
-`dunetask` and its examples (`examples/depth_watcher`, `examples/conformance`):
-see [dunetask/README.md](dunetask/README.md).
+DUNE tasks in Go (package `dunetask`, built on this codec) are in DUNE's
+tree: `sdk/go` (module `github.com/oceanscan/dune/sdk/go`).
 
 ## Cross-Compilation (Raspberry Pi)
 
