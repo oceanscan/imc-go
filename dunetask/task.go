@@ -118,6 +118,8 @@ type Task struct {
 	inbox      mailbox[imc.IMessage]
 	ctl        mailbox[func()]
 	tick       chan func()
+	drops      uint64
+	dropWarned time.Time
 	cancel     context.CancelFunc
 	done       chan struct{}
 }
@@ -407,7 +409,17 @@ func (t *Task) deliver(m imc.IMessage) {
 		if b := t.Bus(); b != nil {
 			b.taskDrops.Add(1)
 		}
-		t.log.Warnf("handlers too slow: dropping messages")
+		t.mu.Lock()
+		t.drops++
+		warn := time.Since(t.dropWarned) >= dropReport
+		if warn {
+			t.dropWarned = time.Now()
+		}
+		n := t.drops
+		t.mu.Unlock()
+		if warn {
+			t.log.Warnf("handlers too slow: dropping messages (%d so far)", n)
+		}
 	}
 }
 
