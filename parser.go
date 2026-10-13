@@ -9,6 +9,7 @@ import (
 	"os"
 )
 
+// XMLProtocol is an IMC XML specification (the root <messages> element).
 type XMLProtocol struct {
 	XMLName   xml.Name          `xml:"messages"`
 	Name      string            `xml:"name,attr"`
@@ -24,11 +25,13 @@ type XMLProtocol struct {
 	MD5 string `xml:"-"`
 }
 
+// XMLType is a primitive type of the specification.
 type XMLType struct {
 	Name string `xml:"name,attr"`
 	Size int    `xml:"size,attr"`
 }
 
+// XMLEnum is a global enumeration definition.
 type XMLEnum struct {
 	Name   string     `xml:"name,attr"`
 	Abbrev string     `xml:"abbrev,attr"`
@@ -36,6 +39,7 @@ type XMLEnum struct {
 	Values []XMLValue `xml:"value"`
 }
 
+// XMLBitfield is a global bitfield definition.
 type XMLBitfield struct {
 	Name   string     `xml:"name,attr"`
 	Abbrev string     `xml:"abbrev,attr"`
@@ -43,22 +47,26 @@ type XMLBitfield struct {
 	Values []XMLValue `xml:"value"`
 }
 
+// XMLValue is a value of an enumeration or bitfield.
 type XMLValue struct {
 	ID     string `xml:"id,attr"`
 	Name   string `xml:"name,attr"`
 	Abbrev string `xml:"abbrev,attr"`
 }
 
+// XMLMessageGroup is a group of messages (e.g. Maneuver).
 type XMLMessageGroup struct {
 	Name     string           `xml:"name,attr"`
 	Abbrev   string           `xml:"abbrev,attr"`
 	MsgTypes []XMLMessageType `xml:"message-type"`
 }
 
+// XMLMessageType is a member of a message group.
 type XMLMessageType struct {
 	Abbrev string `xml:"abbrev,attr"`
 }
 
+// XMLMessage is a message definition.
 type XMLMessage struct {
 	ID     uint16     `xml:"id,attr"`
 	Name   string     `xml:"name,attr"`
@@ -66,6 +74,7 @@ type XMLMessage struct {
 	Fields []XMLField `xml:"field"`
 }
 
+// XMLField is a field of a message (or of the header or footer).
 type XMLField struct {
 	Name     string     `xml:"name,attr"`
 	Abbrev   string     `xml:"abbrev,attr"`
@@ -79,6 +88,7 @@ type XMLField struct {
 	Values   []XMLValue `xml:"value"` // Inline values for enums/bitfields
 }
 
+// ParseXML parses an IMC XML file.
 func ParseXML(path string) (*XMLProtocol, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -89,6 +99,7 @@ func ParseXML(path string) (*XMLProtocol, error) {
 	return ParseReader(file)
 }
 
+// ParseReader parses an IMC XML document and computes its MD5.
 func ParseReader(r io.Reader) (*XMLProtocol, error) {
 	var proto XMLProtocol
 	h := md5.New()

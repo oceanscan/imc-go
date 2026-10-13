@@ -13,6 +13,7 @@ import (
 // them).
 type Level int
 
+// Log levels.
 const (
 	LevelDebug Level = 10
 	LevelInfo  Level = 20
@@ -21,6 +22,7 @@ const (
 	LevelCrit  Level = 50
 )
 
+// String returns the name of the level (DEBUG, INFO, WARNING, ERROR or CRITICAL).
 func (l Level) String() string {
 	switch {
 	case l >= LevelCrit:
@@ -123,7 +125,14 @@ func (l *Logger) Log(level Level, format string, args ...any) {
 	io.WriteString(o.w, b.String())
 }
 
+// Debugf writes a DEBUG line.
 func (l *Logger) Debugf(format string, args ...any) { l.Log(LevelDebug, format, args...) }
-func (l *Logger) Infof(format string, args ...any)  { l.Log(LevelInfo, format, args...) }
-func (l *Logger) Warnf(format string, args ...any)  { l.Log(LevelWarn, format, args...) }
+
+// Infof writes an INFO line.
+func (l *Logger) Infof(format string, args ...any) { l.Log(LevelInfo, format, args...) }
+
+// Warnf writes a WARNING line.
+func (l *Logger) Warnf(format string, args ...any) { l.Log(LevelWarn, format, args...) }
+
+// Errorf writes an ERROR line.
 func (l *Logger) Errorf(format string, args ...any) { l.Log(LevelError, format, args...) }

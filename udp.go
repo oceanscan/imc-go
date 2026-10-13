@@ -9,11 +9,13 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
+// Transporter sends and receives IMC messages over UDP (one frame per datagram).
 type Transporter struct {
 	Proto *Protocol
 	Conn  *net.UDPConn
 }
 
+// NewUDPTransporter listens on a UDP address (SO_REUSEADDR and SO_REUSEPORT set).
 func NewUDPTransporter(proto *Protocol, addr string) (*Transporter, error) {
 	lc := net.ListenConfig{
 		Control: func(network, address string, c syscall.RawConn) error {
@@ -42,6 +44,7 @@ func NewUDPTransporter(proto *Protocol, addr string) (*Transporter, error) {
 	}, nil
 }
 
+// JoinMulticast joins a multicast group on every multicast interface.
 func (t *Transporter) JoinMulticast(groupAddr string) error {
 	addr, err := net.ResolveUDPAddr("udp", groupAddr)
 	if err != nil {
@@ -71,6 +74,7 @@ func (t *Transporter) JoinMulticast(groupAddr string) error {
 	return nil
 }
 
+// Send serializes a message and sends it to addr.
 func (t *Transporter) Send(msg *Message, addr string) error {
 	data, err := msg.Serialize(t.Proto)
 	if err != nil {
@@ -86,6 +90,7 @@ func (t *Transporter) Send(msg *Message, addr string) error {
 	return err
 }
 
+// Receive waits for a datagram and decodes it (strictly unless the protocol is lenient).
 func (t *Transporter) Receive() (*Message, *net.UDPAddr, error) {
 	buf := make([]byte, 65535)
 	n, addr, err := t.Conn.ReadFromUDP(buf)
@@ -101,6 +106,7 @@ func (t *Transporter) Receive() (*Message, *net.UDPAddr, error) {
 	return msg, addr, nil
 }
 
+// Close closes the socket.
 func (t *Transporter) Close() error {
 	return t.Conn.Close()
 }

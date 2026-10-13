@@ -44,6 +44,7 @@ var (
 // message id the codec does not know.
 type UnknownMessageError struct{ MGID uint16 }
 
+// Error describes the error.
 func (e *UnknownMessageError) Error() string {
 	return fmt.Sprintf("imc: unknown message id %d", e.MGID)
 }
@@ -54,7 +55,10 @@ type FieldError struct {
 	Err   error
 }
 
+// Error describes the error, prefixed with the field.
 func (e *FieldError) Error() string { return "imc: " + e.Field + ": " + e.Err.Error() }
+
+// Unwrap returns the error of the field.
 func (e *FieldError) Unwrap() error { return e.Err }
 
 func errShort(field string) error { return &FieldError{field, ErrShort} }

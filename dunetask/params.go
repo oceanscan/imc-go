@@ -19,6 +19,7 @@ type ParamType interface {
 // ParamError is an invalid parameter value or an unknown parameter.
 type ParamError struct{ Msg string }
 
+// Error describes the error.
 func (e *ParamError) Error() string { return e.Msg }
 
 func paramErr(format string, args ...any) error { return &ParamError{fmt.Sprintf(format, args...)} }

@@ -446,6 +446,7 @@ type gatedReader struct {
 	c *Client
 }
 
+// Read waits while the server is paused, then reads.
 func (g *gatedReader) Read(p []byte) (int, error) {
 	g.s.mu.Lock()
 	for g.s.paused && !g.s.closed {

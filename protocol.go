@@ -57,6 +57,7 @@ type Protocol struct {
 	Lenient bool
 }
 
+// NewProtocol builds the dynamic codec of a specification (strict; see Protocol).
 func NewProtocol(xmlProto *XMLProtocol) *Protocol {
 	p := &Protocol{
 		Version:  xmlProto.Version,
@@ -138,6 +139,7 @@ func zeroValue(typ string) any {
 	return nil
 }
 
+// GetField returns the definition of a field of a message (nil if unknown).
 func (p *Protocol) GetField(mgid uint16, abbrev string) *XMLField {
 	msgDef, ok := p.Messages[mgid]
 	if !ok {
@@ -408,6 +410,7 @@ func ToUint8(v any) uint8 {
 	return uint8(ToInt64(v))
 }
 
+// ToInt8 converts a numeric value (truncating; 0 for other kinds).
 func ToInt8(v any) int8 {
 	if x, ok := v.(int8); ok {
 		return x
@@ -415,6 +418,7 @@ func ToInt8(v any) int8 {
 	return int8(ToInt64(v))
 }
 
+// ToUint16 converts a numeric value (truncating; 0 for other kinds).
 func ToUint16(v any) uint16 {
 	if x, ok := v.(uint16); ok {
 		return x
@@ -422,6 +426,7 @@ func ToUint16(v any) uint16 {
 	return uint16(ToInt64(v))
 }
 
+// ToInt16 converts a numeric value (truncating; 0 for other kinds).
 func ToInt16(v any) int16 {
 	if x, ok := v.(int16); ok {
 		return x
@@ -429,6 +434,7 @@ func ToInt16(v any) int16 {
 	return int16(ToInt64(v))
 }
 
+// ToUint32 converts a numeric value (truncating; 0 for other kinds).
 func ToUint32(v any) uint32 {
 	if x, ok := v.(uint32); ok {
 		return x
@@ -436,6 +442,7 @@ func ToUint32(v any) uint32 {
 	return uint32(ToInt64(v))
 }
 
+// ToInt32 converts a numeric value (truncating; 0 for other kinds).
 func ToInt32(v any) int32 {
 	if x, ok := v.(int32); ok {
 		return x
@@ -443,6 +450,7 @@ func ToInt32(v any) int32 {
 	return int32(ToInt64(v))
 }
 
+// ToInt64 converts a numeric value (truncating; 0 for other kinds).
 func ToInt64(v any) int64 {
 	switch x := v.(type) {
 	case int:
@@ -473,6 +481,7 @@ func ToInt64(v any) int64 {
 	return 0
 }
 
+// ToFloat32 converts a numeric value (0 for other kinds).
 func ToFloat32(v any) float32 {
 	if x, ok := v.(float32); ok {
 		return x
@@ -480,6 +489,7 @@ func ToFloat32(v any) float32 {
 	return float32(ToFloat64(v))
 }
 
+// ToFloat64 converts a numeric value (0 for other kinds).
 func ToFloat64(v any) float64 {
 	switch x := v.(type) {
 	case float64:
@@ -506,6 +516,7 @@ func ToFloat64(v any) float64 {
 	return 0
 }
 
+// ToString returns a string or []byte value as a string ("" for other kinds).
 func ToString(v any) string {
 	switch x := v.(type) {
 	case string:
@@ -516,6 +527,7 @@ func ToString(v any) string {
 	return ""
 }
 
+// ToByteSlice returns a []byte or string value as bytes (nil for other kinds).
 func ToByteSlice(v any) []byte {
 	switch x := v.(type) {
 	case []byte:
