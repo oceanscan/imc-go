@@ -35,7 +35,8 @@ for platform in "${PLATFORMS[@]}"; do
             OUT_FILE="$OUT_FILE.exe"
         fi
         
-        GOOS=$GOOS GOARCH=$GOARCH go build -o "$OUT_FILE" "cmd/$cmd/main.go"
+        # The tools are a module of their own (cmd/go.mod).
+        (cd cmd && GOOS=$GOOS GOARCH=$GOARCH go build -o "../$OUT_FILE" "./$cmd")
         
         if [ $? -ne 0 ]; then
             echo "FAILED to build $cmd for $platform"
