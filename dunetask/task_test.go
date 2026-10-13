@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -849,5 +850,32 @@ func TestOutgoingQueueBounded(t *testing.T) {
 	}
 	if !srv.Clients()[0].Sub()[imc.IDEntityList] {
 		t.Fatal("client state lost")
+	}
+}
+
+// Run leaves no goroutine behind, whether it ends connected, while
+// reconnecting, or after a server restart.
+func TestNoGoroutineLeak(t *testing.T) {
+	base := runtime.NumGoroutine()
+	srv := start(t, dunetest.Config{})
+	for i := 0; i < 3; i++ {
+		w := newWatcher(fmt.Sprintf("Leak %d", i))
+		e := run(t, srv, dunetask.Options{}, w.Task)
+		e.waitReady()
+		if i == 1 {
+			srv.DropClients()
+			time.Sleep(50 * time.Millisecond)
+		}
+		e.stop()
+	}
+	// A bus that never connects.
+	e := run(t, srv, dunetask.Options{Bus: "tcp://127.0.0.1:1"}, newWatcher("Nowhere").Task)
+	time.Sleep(300 * time.Millisecond)
+	e.stop()
+	srv.Close()
+	if !eventually(func() bool { return runtime.NumGoroutine() <= base }, 3*time.Second) {
+		buf := make([]byte, 1<<20)
+		n := runtime.Stack(buf, true)
+		t.Fatalf("%d goroutines, %d before\n%s", runtime.NumGoroutine(), base, buf[:n])
 	}
 }
