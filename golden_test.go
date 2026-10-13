@@ -6,9 +6,8 @@ package imc
 // typed and with the dynamic codec; the invalid frames and the stream are
 // read as DUNE reads them.
 //
-// The corpus is read from $DUNE_GOLDEN, or ../dune-ml3-go/tests/golden or
-// ../dune/tests/golden (a DUNE checkout next to this one); the tests are
-// skipped without it.
+// The corpus is read from $DUNE_GOLDEN (a DUNE tree's tests/golden), or
+// from testdata/golden, a copy of DUNE's.
 
 import (
 	"bytes"
@@ -63,7 +62,7 @@ type goldenManifest struct {
 }
 
 func goldenDir(t testing.TB) string {
-	dirs := []string{filepath.Join("..", "dune-ml3-go", "tests", "golden"), filepath.Join("..", "dune", "tests", "golden")}
+	dirs := []string{filepath.Join("testdata", "golden")}
 	if d := os.Getenv("DUNE_GOLDEN"); d != "" {
 		dirs = []string{d}
 	}

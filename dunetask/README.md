@@ -346,7 +346,7 @@ See `task_test.go` and `example_test.go`. The tests of this module:
 
 ```sh
 go test -race ./...                                   # codec, SDK with the fake DUNE, examples
-DUNE_GOLDEN=<dune>/tests/golden go test .             # + DUNE's golden frames (default ../dune-ml3-go or ../dune)
+DUNE_GOLDEN=<dune>/tests/golden go test .             # golden frames of a DUNE tree (default: testdata/golden)
 go test -run XXX -bench . -benchmem .                 # codec benchmarks
 ```
 
