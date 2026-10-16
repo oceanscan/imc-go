@@ -6,7 +6,7 @@ require (
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/oceanscan/imc-go v1.3.0
+	github.com/oceanscan/dune-sdk/go v0.1.0
 	golang.org/x/crypto v0.47.0
 )
 
@@ -33,4 +33,8 @@ require (
 	golang.org/x/text v0.33.0 // indirect
 )
 
-replace github.com/oceanscan/imc-go => ../
+// The IMC codec moved to github.com/oceanscan/dune-sdk (package
+// github.com/oceanscan/dune-sdk/go/imc). Until dune-sdk is published (tag
+// go/v0.1.0), build against a checkout next to this one; then drop this
+// line (GOPRIVATE=github.com/oceanscan/* while the repository is private).
+replace github.com/oceanscan/dune-sdk/go => ../../dune-sdk/go

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/oceanscan/imc-go"
+	"github.com/oceanscan/dune-sdk/go/imc"
 	"golang.org/x/crypto/ssh"
 )
 

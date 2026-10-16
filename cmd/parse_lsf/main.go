@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/oceanscan/imc-go"
+	"github.com/oceanscan/dune-sdk/go/imc"
 )
 
 type gzReadCloser struct {

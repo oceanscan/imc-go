@@ -1,200 +1,44 @@
-# Go IMC Module
+# imc-go: IMC log tools
 
-A Go implementation of the Inter-Module Communication (IMC) protocol of DUNE,
-Neptus and the LSTS toolchain, and an SDK to write DUNE tasks in Go.
+Command-line tools for IMC (the Inter-Module Communication protocol of
+DUNE, Neptus and the LSTS toolchain) and LSF logs: converters (`lsf2csv`,
+`lsf2json`), mergers and splitters (`lsfmerge`, `lsfsplit`), log
+synchronization (`logsync`, `auto-logsync`, a TUI), `estate_positions`,
+`parse_lsf`, `multicast_listener` and `verify`. `dist.sh` builds them for
+Linux, Windows and macOS (and `.deb` packages).
 
-- **Typed messages** (`messages.go`, generated from the bundled `IMC.xml`, the
-  one DUNE is generated from: IMC 5.5.8, MD5 `IMCMD5`): one struct per
-  message, enumeration and bitfield types with constants, typed message
-  lists, and direct encoders/decoders (no reflection): `Marshal`,
-  `AppendFrame`, `Decode`.
-- **Stream reader** (`FrameReader`) with DUNE's resynchronization rules, for
-  TCP, Unix sockets and logs.
-- **Dynamic codec** (`Protocol`, `Message`): load any `IMC.xml` at run time and
-  work with fields in a `map[string]any` (what the log tools use).
-- **Strict by default**: sync number, CRC, frame length and sizes checked;
-  big endian frames decoded as big endian; a lenient mode for log forensics.
-- The codec of DUNE's Go task SDK (`dunetask`), which lives in DUNE's tree
-  (`sdk/go`, module `github.com/oceanscan/dune/sdk/go`).
-- **UDP Transporter**: unicast and multicast (`SO_REUSEADDR`/`SO_REUSEPORT`).
-- **Tools** (`cmd/`, a module of its own): LSF log converters, mergers,
-  splitters, log synchronization (TUI).
-- Tested byte for byte against DUNE's golden frames (both byte orders).
+## The codec moved to dune-sdk
 
-## Importing as a Library
+The Go IMC codec that was this repository's root package (`imc`: typed
+messages generated from DUNE's `IMC.xml`, the stream reader, the dynamic
+codec, the UDP transporter) is now package `imc` of the Go module of
+[dune-sdk](https://github.com/oceanscan/dune-sdk), the repository of DUNE's
+task SDKs, with its history:
 
-To use `imc-go` in your own project:
+```go
+import "github.com/oceanscan/dune-sdk/go/imc"     // was "github.com/oceanscan/imc-go"
+```
+
+The package name and API are unchanged (see `go/imc/README.md` there).
+This repository keeps only the tools, which import it. Until dune-sdk is
+published (its Go module tag `go/v0.1.0`), `cmd/go.mod` replaces it with a
+checkout next to this one:
 
 ```bash
-go get github.com/oceanscan/imc-go
+git clone https://github.com/oceanscan/dune-sdk ../dune-sdk     # next to imc-go
+cd cmd && go build ./...
 ```
 
-```go
-import imc "github.com/oceanscan/imc-go"
-```
+Once it is published, drop the `replace` line of `cmd/go.mod` (and, while
+dune-sdk is private, set `GOPRIVATE=github.com/oceanscan/*`).
 
-For a local checkout, `go mod edit -replace github.com/oceanscan/imc-go=../imc-go`.
-The library module depends only on `golang.org/x/net` and `golang.org/x/sys`;
-the tools in `cmd/` are a separate module (`github.com/oceanscan/imc-go/cmd`)
-with their TUI dependencies.
+`IMC.xml` (IMC 5.5.8, DUNE's) stays here as the tools' default
+specification; LSF logs carry their own `IMC.xml.gz`, which the tools find
+next to the log.
 
-## Getting Started
+## The Tools
 
-### Prerequisites
-
-- Go 1.24 or later
-- Access to an `IMC.xml` specification file.
-
-### Installation
-
-```bash
-go mod tidy
-```
-
-## Usage
-
-### 1. Initialize the Protocol
-
-```go
-import "github.com/oceanscan/imc-go"
-
-// Parse the XML specification
-xmlProto, _ := imc.ParseXML("IMC.xml")
-// Create a protocol engine
-proto := imc.NewProtocol(xmlProto)
-```
-
-### 2. Creating and Sending Messages
-
-```go
-// Create a new UDP transporter
-trans, _ := imc.NewUDPTransporter(proto, "0.0.0.0:0")
-defer trans.Close()
-
-// Create an Announce message
-msg, _ := proto.CreateMessage("Announce")
-msg.Fields["sys_name"] = "My-Go-Node"
-msg.Fields["sys_type"] = uint8(0) // CCU
-
-// Send to a specific address
-trans.Send(msg, "127.0.0.1:6002")
-```
-
-### 3. Receiving Multicast Messages
-
-```go
-// Listen on the standard IMC multicast port
-trans, _ := imc.NewUDPTransporter(proto, "0.0.0.0:30101")
-defer trans.Close()
-
-// Join the IMC multicast group
-trans.JoinMulticast("224.0.75.69:30101")
-
-for {
-    msg, addr, err := trans.Receive()
-    if err == nil {
-        abbrev := proto.Messages[msg.Header.MGID].Abbrev
-        fmt.Printf("Received %s from %v\n", abbrev, addr)
-    }
-}
-```
-
-### 4. Typed Messages
-
-Typed messages have their own codec (no XML needed at run time):
-
-```go
-m := &imc.EntityState{State: imc.EntityStateState_FAULT, Description: "too deep"}
-frame, err := imc.Marshal(m)      // little endian frame
-back, err := imc.Decode(frame)    // strict: sync, length, CRC
-es := back.(*imc.EntityState)
-
-fr := imc.NewFrameReader(conn)    // a stream: TCP, Unix socket, log
-for {
-	f, err := fr.Next()           // a frame with a valid CRC
-	if err != nil {
-		break
-	}
-	if f.Header.MGID == imc.IDEstimatedState {
-		m, _ := f.Decode()
-		_ = m.(*imc.EstimatedState)
-	}
-}
-```
-
-They convert to and from dynamic messages:
-
-```go
-import "github.com/oceanscan/imc-go"
-
-// Receiving and converting to typed
-msg, addr, _ := trans.Receive()
-abbrev := proto.Messages[msg.Header.MGID].Abbrev
-
-// Use CreateTyped for easy conversion
-typedMsg, err := proto.CreateTyped(abbrev, msg)
-if err == nil {
-    switch m := typedMsg.(type) {
-    case *imc.Announce:
-        fmt.Printf("Received Announce from %s: Name=%s, Type=%d\n", 
-            addr, m.SysName, m.SysType)
-    case *imc.EstimatedState:
-        fmt.Printf("Vehicle Position: Lat=%f, Lon=%f\n", m.Lat, m.Lon)
-    }
-}
-
-// Creating a typed message for sending
-ann := imc.Announce{
-    SysName: "MyNode",
-    SysType: 2, // UUV
-}
-trans.Send(ann.ToMessage(), "127.0.0.1:6001")
-```
-
-### 5. Strict and Lenient Decoding
-
-`Protocol` is strict by default: only the specification's sync number, in
-either byte order (a byte swapped sync number is a big endian frame, decoded
-as big endian), frames whose CRC and length are right, and, when encoding,
-every field present, of the right kind and in range (`CreateMessage` fills
-every field with its zero value). For log forensics, `proto.Lenient = true`
-keeps the behaviour of imc-go 1.3 (any sync number with an 0xFE byte, CRC
-ignored, missing fields written as zero); the tools in `cmd/` set it. Sizes
-over 65535 bytes are refused in both modes.
-
-## Regenerating Messages
-
-`messages.go` is generated from `IMC.xml` by `internal/imcgen` (standard
-library only):
-
-```bash
-go generate .        # go run ./internal/imcgen -xml IMC.xml -out messages.go
-```
-
-Use the original XML DUNE was generated from (its MD5 is DUNE's
-`DUNE_IMC_CONST_MD5`, stamped in `IMCMD5`; `-md5` refuses another one). DUNE
-refuses a bus peer whose IMC MD5 differs. The `IMC.xml.gz` stored in DUNE's
-logs has its descriptions stripped, so its MD5 differs: fine for the dynamic
-codec, not for the typed messages of a DUNE peer.
-
-### From imc-go 1.3 (IMC 5.5.5)
-
-- The bundled XML is now IMC 5.5.8 (DUNE's). Messages and fields added or
-  changed since 5.5.5 change the typed structs accordingly; the dynamic
-  codec still reads any XML.
-- Enumerated and bitfield fields have their own types (`EntityStateState`,
-  `CLoopsMask`); untyped constants and conversions (`uint8(x)`) still work.
-- Inline message fields are `IMessage` or `*T`, message lists `[]*T` or
-  `[]IMessage` (were `*Message` and `[]*Message`); typed structs no longer
-  have an `Extra` map.
-- The dynamic codec is strict by default (above); set `Lenient` for the old
-  behaviour. `CreateMessage` now fills every field.
-- `cmd/gen_messages` is replaced by `internal/imcgen`, and the tools are a
-  module of their own (`cd cmd && go build ./...`).
-
-## Running Examples
-
-The project includes several command-line tools in the `cmd/` directory to demonstrate the library's capabilities. 
+The command-line tools in `cmd/` (a module of its own):
 
 ### 1. Multicast Listener
 Joins the standard LSTS multicast group and prints received `Announce` messages from other systems on the network.
@@ -216,8 +60,8 @@ cd cmd && go run ./estate_positions ../IMC.xml Data.lsf > positions.csv
 ```
 
 ### 4. DUNE Tasks
-DUNE tasks in Go (package `dunetask`, built on this codec) are in DUNE's
-tree: `sdk/go` (module `github.com/oceanscan/dune/sdk/go`).
+DUNE tasks in Go (package `dunetask`, on the same codec) are in dune-sdk:
+`go/dunetask` of module `github.com/oceanscan/dune-sdk/go`.
 
 ## Cross-Compilation (Raspberry Pi)
 

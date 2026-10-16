@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/oceanscan/imc-go"
+	"github.com/oceanscan/dune-sdk/go/imc"
 )
 
 var (

@@ -5,7 +5,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/oceanscan/imc-go"
+	"github.com/oceanscan/dune-sdk/go/imc"
 )
 
 func listen(proto *imc.Protocol, port int, group string) {
