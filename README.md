@@ -21,7 +21,7 @@ import "github.com/oceanscan/dune-sdk/go/imc"     // was "github.com/oceanscan/i
 
 The package name and API are unchanged (see `go/imc/README.md` there).
 This repository keeps only the tools, which import it. Until dune-sdk is
-published (its Go module tag `go/v0.1.0`), `cmd/go.mod` replaces it with a
+published (its Go module tag `go/v1.0.0`), `cmd/go.mod` replaces it with a
 checkout next to this one:
 
 ```bash
