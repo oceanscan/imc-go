@@ -32,9 +32,3 @@ require (
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 )
-
-// The IMC codec moved to github.com/oceanscan/dune-sdk (package
-// github.com/oceanscan/dune-sdk/go/imc). Until dune-sdk is published (tag
-// go/v0.1.0), build against a checkout next to this one; then drop this
-// line (GOPRIVATE=github.com/oceanscan/* while the repository is private).
-replace github.com/oceanscan/dune-sdk/go => ../../dune-sdk/go

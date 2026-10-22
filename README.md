@@ -20,17 +20,15 @@ import "github.com/oceanscan/dune-sdk/go/imc"     // was "github.com/oceanscan/i
 ```
 
 The package name and API are unchanged (see `go/imc/README.md` there).
-This repository keeps only the tools, which import it. Until dune-sdk is
-published (its Go module tag `go/v1.0.0`), `cmd/go.mod` replaces it with a
-checkout next to this one:
+This repository keeps only the tools, which import it (module
+`github.com/oceanscan/dune-sdk/go`, tag `go/v1.0.0`). dune-sdk is private, so
+tell Go not to use the public proxy for it, and let git fetch it over SSH:
 
 ```bash
-git clone https://github.com/oceanscan/dune-sdk ../dune-sdk     # next to imc-go
+export GOPRIVATE=github.com/oceanscan/*
+git config --global url."git@github.com:".insteadOf https://github.com/
 cd cmd && go build ./...
 ```
-
-Once it is published, drop the `replace` line of `cmd/go.mod` (and, while
-dune-sdk is private, set `GOPRIVATE=github.com/oceanscan/*`).
 
 `IMC.xml` (IMC 5.5.8, DUNE's) stays here as the tools' default
 specification; LSF logs carry their own `IMC.xml.gz`, which the tools find
